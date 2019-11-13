@@ -4,71 +4,80 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.util.Log
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Observer
 import com.puzzle.bench.themesalarmmanager.KioskThemeAlarmReceiver.Companion.EXTRA_ID_THEM
 import kotlinx.android.synthetic.main.activity_main.*
-import java.util.*
+import java.util.concurrent.TimeUnit
 
 class MainActivity : AppCompatActivity() {
+
+    private lateinit var alarHelper: AlarmManagerHelper
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         bt_set_alarm.setOnClickListener {
             if (tv_hour.text.isEmpty() || tv_minute.text.isEmpty()) {
+                createAlarm(it.context)
                 return@setOnClickListener
             }
             val hour = tv_hour.text.toString().toInt()
             val minutes = tv_minute.text.toString().toInt()
             val kioskTheme = KioskTheme(hour, minutes, "1")
             val kioskTheme2 = KioskTheme(hour, minutes + 1, "2")
-            val alarHelper = AlarmManagerHelper(it.context)
+            alarHelper = AlarmManagerHelper(it.context)
+            createAlarm(it.context)
             alarHelper.run {
-                createAlarm(kioskTheme)
-                createAlarm(kioskTheme2)
+                setKioskThemeAlarm(kioskTheme)
+                //setKioskThemeAlarm(kioskTheme2)
             }
+            subscribeToKioskReceiver()
         }
+        bt_cancel_alarm.setOnClickListener {
+            alarHelper.cancelAlarm()
+        }
+
     }
 
-    private fun createAlarmSetExactAndAllowWhileIdle(context: Context, kioskTheme: KioskTheme) {
-        val calendar: Calendar = Calendar.getInstance().apply {
-            timeInMillis = System.currentTimeMillis()
-            set(Calendar.HOUR_OF_DAY, kioskTheme.hour)
-            set(Calendar.MINUTE, kioskTheme.minute)
-            set(Calendar.SECOND, 0)
-        }
+
+    override fun onStop() {
+        super.onStop()
+        alarHelper.cancelAlarm()
+
+    }
+
+    private fun subscribeToKioskReceiver() {
+        KioskThemeAlarmReceiver.getIdThemeLiveData().observe(this, Observer {
+            Toast.makeText(this, "Apply theme $it", Toast.LENGTH_LONG).show()
+        })
+    }
+
+    private fun createAlarm(context: Context) {
+
+        val seconds = TimeUnit.SECONDS.toMillis(20)
         val alarmManager: AlarmManager =
             context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-
-        val intent = Intent(context, KioskThemeAlarmReceiver::class.java).let { intent ->
-            PendingIntent.getBroadcast(
-                context,
-                calendar.timeInMillis.toInt(),
-                intent.putExtra(EXTRA_ID_THEM, kioskTheme.idTheme),
-                PendingIntent.FLAG_UPDATE_CURRENT
-            )
-        }
+        alarmManager.set(
+            AlarmManager.RTC_WAKEUP,
+            SystemClock.elapsedRealtime() + seconds,
+            Intent(context, KioskThemeAlarmReceiver::class.java).let { intent ->
+                PendingIntent.getBroadcast(
+                    context,
+                    KioskThemeAlarmReceiver.KIOSK_THEME_ALARM_CODE,
+                    intent.putExtra(EXTRA_ID_THEM, "test"),
+                    PendingIntent.FLAG_UPDATE_CURRENT
+                )
+            }
+        )
 
         Log.d(
             MainActivity::class.java.canonicalName,
-            "Start  AlarmManager for KioskTheme ${kioskTheme.idTheme}"
+            "createAlarm minuteMillis"
         )
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            alarmManager.setExactAndAllowWhileIdle(
-                AlarmManager.RTC_WAKEUP,
-                calendar.timeInMillis,
-                intent
-            )
-        } else {
-            alarmManager.setExact(
-                AlarmManager.RTC_WAKEUP,
-                calendar.timeInMillis,
-                intent
-            )
-        }
     }
 }

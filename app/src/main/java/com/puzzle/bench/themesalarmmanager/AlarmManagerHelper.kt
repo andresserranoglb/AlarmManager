@@ -6,24 +6,28 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.util.Log
+import com.puzzle.bench.themesalarmmanager.KioskThemeAlarmReceiver.Companion.KIOSK_THEME_ALARM_CODE
 import java.util.*
 
 class AlarmManagerHelper(private val context: Context) {
-    val alarmManager: AlarmManager =
+    private val alarmManager: AlarmManager =
         context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
+    private lateinit var intent: PendingIntent
 
-    fun createAlarm(kioskTheme: KioskTheme) {
+
+    fun setKioskThemeAlarm(kioskTheme: KioskTheme) {
+        cancelAlarm()
         val calendar: Calendar = Calendar.getInstance().apply {
             timeInMillis = System.currentTimeMillis()
             set(Calendar.HOUR_OF_DAY, kioskTheme.hour)
             set(Calendar.MINUTE, kioskTheme.minute)
             set(Calendar.SECOND, 0)
         }
-        val intent = Intent(context, KioskThemeAlarmReceiver::class.java).let { intent ->
+        intent = Intent(context, KioskThemeAlarmReceiver::class.java).let { intent ->
             PendingIntent.getBroadcast(
                 context,
-                calendar.timeInMillis.toInt(),
+                KIOSK_THEME_ALARM_CODE,
                 intent.putExtra(KioskThemeAlarmReceiver.EXTRA_ID_THEM, kioskTheme.idTheme),
                 PendingIntent.FLAG_UPDATE_CURRENT
             )
@@ -46,5 +50,16 @@ class AlarmManagerHelper(private val context: Context) {
                 intent
             )
         }
+    }
+
+    fun cancelAlarm() {
+        if (::intent.isInitialized) {
+            alarmManager.cancel(intent)
+            Log.d(
+                MainActivity::class.java.canonicalName,
+                " AlarmManager for KioskTheme cancelled "
+            )
+        }
+
     }
 }
